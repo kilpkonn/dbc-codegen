@@ -42,7 +42,7 @@ mod keywords;
 mod pad;
 
 /// Code generator configuration. See module-level docs for an example.
-#[derive(TypedBuilder)]
+#[derive(Clone, TypedBuilder)]
 #[non_exhaustive]
 pub struct Config<'a> {
     /// Name of the dbc-file. Used for generated docs only.
@@ -54,6 +54,10 @@ pub struct Config<'a> {
     /// Optional: Print debug info to stdout while generating code. Default: `false`.
     #[builder(default)]
     pub debug_prints: bool,
+
+    /// Optional: Generate file as standalone or as part of bigger project. Default: `Standalone`
+    #[builder(default = FileStyle::Standalone)]
+    pub file_style: FileStyle<'a>,
 
     /// Optional: `impl Debug` for generated types. Default: `Never`.
     #[builder(default)]
@@ -77,7 +81,7 @@ pub struct Config<'a> {
 /// Configuration for including features in the codegenerator.
 ///
 /// e.g. [Debug] impls for generated types.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub enum FeatureConfig<'a> {
     /// Generate code for this feature.
     Always,
@@ -88,6 +92,24 @@ pub enum FeatureConfig<'a> {
     /// Don't generate code for this feature.
     #[default]
     Never,
+}
+
+/// Configuration for generating file either as standalone or as a part of bigger project.
+///
+/// Useful for generating whole crate from multiple dbc files.
+#[derive(Default, Clone)]
+pub enum FileStyle<'a> {
+    /// Generated code is self contained file
+    #[default]
+    Standalone,
+
+    /// Generated code is part of bigger project
+    Shared {
+        /// Import statement for shared types
+        ///
+        /// For example `use crate::can::CanError`
+        common_types_import: &'a str,
+    },
 }
 
 /// Write Rust structs matching DBC input description to `out` buffer
@@ -108,7 +130,7 @@ pub fn codegen(config: Config<'_>, out: impl Write) -> Result<()> {
     writeln!(&mut w, "// Generated code!")?;
     writeln!(
         &mut w,
-        "#![allow(unused_comparisons, unreachable_patterns)]"
+        "#![allow(unused_comparisons, unreachable_patterns, unused_imports)]"
     )?;
     writeln!(&mut w, "#![allow(clippy::let_and_return, clippy::eq_op)]")?;
     writeln!(
@@ -129,25 +151,48 @@ pub fn codegen(config: Config<'_>, out: impl Write) -> Result<()> {
     writeln!(&mut w, "//!")?;
     writeln!(&mut w, "//! - Version: `{:?}`", dbc.version())?;
     writeln!(&mut w)?;
+    writeln!(&mut w, "use core::convert::TryFrom;")?;
     writeln!(&mut w, "use core::ops::BitOr;")?;
     writeln!(&mut w, "use bitvec::prelude::*;")?;
 
     writeln!(w, r##"#[cfg(feature = "arb")]"##)?;
     writeln!(&mut w, "use arbitrary::{{Arbitrary, Unstructured}};")?;
 
+    if let FileStyle::Shared {
+        common_types_import,
+    } = config.file_style
+    {
+        writeln!(&mut w, "{common_types_import}")?;
+    }
+
     writeln!(&mut w)?;
 
     render_dbc(&mut w, &config, &dbc).context("could not generate Rust code")?;
 
-    writeln!(&mut w)?;
-    writeln!(&mut w, "/// This is just to make testing easier")?;
-    writeln!(&mut w, "#[allow(dead_code)]")?;
-    writeln!(&mut w, "fn main() {{}}")?;
-    writeln!(&mut w)?;
+    if matches!(config.file_style, FileStyle::Standalone) {
+        writeln!(&mut w)?;
+        writeln!(&mut w, "/// This is just to make testing easier")?;
+        writeln!(&mut w, "#[allow(dead_code)]")?;
+        writeln!(&mut w, "fn main() {{}}")?;
+        writeln!(&mut w)?;
+
+        render_error(&mut w, &config)?;
+        render_arbitrary_helpers(&mut w, &config)?;
+        writeln!(&mut w)?;
+    }
+
+    Ok(())
+}
+
+/// Write shared items to `out` buffer
+pub fn codegen_shared(config: Config<'_>, mod_declarations: &str, out: impl Write) -> Result<()> {
+    let mut w = BufWriter::new(out);
+    writeln!(&mut w, "// Generated code!")?;
+    writeln!(w)?;
+    writeln!(w, "{mod_declarations}")?;
+    writeln!(w)?;
     render_error(&mut w, &config)?;
     render_arbitrary_helpers(&mut w, &config)?;
-    writeln!(&mut w)?;
-
     Ok(())
 }
 

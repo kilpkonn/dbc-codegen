@@ -17,6 +17,7 @@
 use arbitrary::{Arbitrary, Unstructured};
 use bitvec::prelude::*;
 use core::ops::BitOr;
+use core::ops::BitOr;
 
 /// All messages
 #[derive(Clone, Debug)]
