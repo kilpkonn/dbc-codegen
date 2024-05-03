@@ -327,14 +327,16 @@ fn render_message(mut w: impl Write, config: &Config<'_>, msg: &Message, dbc: &D
             .signals()
             .iter()
             .filter_map(|signal| {
+                let signal_type =
+                    match dbc.value_descriptions_for_signal(*msg.message_id(), signal.name()) {
+                        Some(_) => enum_name(msg, signal),
+                        None => signal_to_rust_type(signal),
+                    };
+
                 if *signal.multiplexer_indicator() == MultiplexIndicator::Plain
                     || *signal.multiplexer_indicator() == MultiplexIndicator::Multiplexor
                 {
-                    Some(format!(
-                        "{}: {}",
-                        field_name(signal.name()),
-                        signal_to_rust_type(signal)
-                    ))
+                    Some(format!("{}: {}", field_name(signal.name()), signal_type))
                 } else {
                     None
                 }
@@ -366,6 +368,12 @@ fn render_message(mut w: impl Write, config: &Config<'_>, msg: &Message, dbc: &D
         writeln!(&mut w, "}}")?;
         writeln!(w)?;
 
+        writeln!(w, "/// Get message id")?;
+        writeln!(w, "pub fn id(&self) -> u32 {{")?;
+        writeln!(w, "    Self::MESSAGE_ID")?;
+        writeln!(w, "}}")?;
+        writeln!(w)?;
+
         writeln!(&mut w, "/// Access message payload raw value")?;
         writeln!(
             &mut w,
@@ -384,7 +392,7 @@ fn render_message(mut w: impl Write, config: &Config<'_>, msg: &Message, dbc: &D
                 MultiplexIndicator::Plain => render_signal(&mut w, config, signal, dbc, msg)
                     .with_context(|| format!("write signal impl `{}`", signal.name()))?,
                 MultiplexIndicator::Multiplexor => {
-                    render_multiplexor_signal(&mut w, config, signal, msg)?
+                    render_multiplexor_signal(&mut w, config, signal, dbc, msg)?
                 }
                 MultiplexIndicator::MultiplexedSignal(_) => {}
                 MultiplexIndicator::MultiplexorAndMultiplexedSignal(_) => {}
@@ -587,7 +595,7 @@ fn render_signal(
     writeln!(&mut w, "}}")?;
     writeln!(w)?;
 
-    render_set_signal(&mut w, config, signal, msg)?;
+    render_set_signal(&mut w, config, signal, dbc, msg)?;
 
     Ok(())
 }
@@ -596,12 +604,13 @@ fn render_set_signal(
     mut w: impl Write,
     config: &Config<'_>,
     signal: &Signal,
+    dbc: &DBC,
     msg: &Message,
 ) -> Result<()> {
     writeln!(&mut w, "/// Set value of {}", signal.name())?;
     writeln!(w, "#[inline(always)]")?;
 
-    // To avoid accidentially changing the multiplexor value without changing
+    // To avoid accidentally changing the multiplexor value without changing
     // the signals accordingly this fn is kept private for multiplexors.
     let visibility = if *signal.multiplexer_indicator() == MultiplexIndicator::Multiplexor {
         ""
@@ -609,18 +618,24 @@ fn render_set_signal(
         "pub "
     };
 
+    let (signal_type, is_enum) =
+        match dbc.value_descriptions_for_signal(*msg.message_id(), signal.name()) {
+            Some(_) => (enum_name(msg, signal), true),
+            None => (signal_to_rust_type(signal), false),
+        };
+
     writeln!(
         w,
         "{}fn set_{}(&mut self, value: {}) -> Result<(), CanError> {{",
         visibility,
         field_name(signal.name()),
-        signal_to_rust_type(signal)
+        signal_type
     )?;
 
     {
         let mut w = PadAdapter::wrap(&mut w);
 
-        if signal.signal_size != 1 {
+        if signal.signal_size != 1 && !is_enum {
             if let FeatureConfig::Gated(gate) = config.check_ranges {
                 writeln!(w, r##"#[cfg(feature = {gate:?})]"##)?;
             }
@@ -644,7 +659,7 @@ fn render_set_signal(
                 writeln!(w, r"}}")?;
             }
         }
-        signal_to_payload(&mut w, signal, msg).context("signal to payload")?;
+        signal_to_payload(&mut w, signal, msg, is_enum).context("signal to payload")?;
     }
 
     writeln!(&mut w, "}}")?;
@@ -693,6 +708,7 @@ fn render_multiplexor_signal(
     mut w: impl Write,
     config: &Config<'_>,
     signal: &Signal,
+    dbc: &DBC,
     msg: &Message,
 ) -> Result<()> {
     writeln!(w, "/// Get raw value of {}", signal.name())?;
@@ -765,7 +781,7 @@ fn render_multiplexor_signal(
     }
     writeln!(w, "}}")?;
 
-    render_set_signal(&mut w, config, signal, msg)?;
+    render_set_signal(&mut w, config, signal, dbc, msg)?;
 
     let mut multiplexed_signals = BTreeMap::new();
     for signal in msg.signals() {
@@ -902,8 +918,21 @@ fn signal_from_payload(mut w: impl Write, signal: &Signal, msg: &Message) -> Res
     Ok(())
 }
 
-fn signal_to_payload(mut w: impl Write, signal: &Signal, msg: &Message) -> Result<()> {
-    if signal.signal_size == 1 {
+fn signal_to_payload(
+    mut w: impl Write,
+    signal: &Signal,
+    msg: &Message,
+    is_enum: bool,
+) -> Result<()> {
+    if is_enum && signal.signal_size == 1 {
+        writeln!(&mut w, "let value = bool::from(value) as u8;",)?;
+    } else if is_enum {
+        writeln!(
+            &mut w,
+            "let value: {} = value.into();",
+            signal_to_rust_int(signal)
+        )?;
+    } else if signal.signal_size == 1 {
         // Map boolean to byte so we can pack it
         writeln!(&mut w, "let value = value as u8;")?;
     } else if signal_is_float_in_rust(signal) {

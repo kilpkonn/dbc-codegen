@@ -1,5 +1,5 @@
 // Generated code!
-#![allow(unused_comparisons, unreachable_patterns)]
+#![allow(unused_comparisons, unreachable_patterns, unused_imports)]
 #![allow(clippy::let_and_return, clippy::eq_op)]
 #![allow(clippy::useless_conversion, clippy::unnecessary_cast)]
 #![allow(
@@ -16,7 +16,7 @@
 #[cfg(feature = "arb")]
 use arbitrary::{Arbitrary, Unstructured};
 use bitvec::prelude::*;
-use core::ops::BitOr;
+use core::convert::TryFrom;
 use core::ops::BitOr;
 
 /// All messages
@@ -80,6 +80,11 @@ impl Foo {
         res.set_voltage(voltage)?;
         res.set_current(current)?;
         Ok(res)
+    }
+
+    /// Get message id
+    pub fn id(&self) -> u32 {
+        Self::MESSAGE_ID
     }
 
     /// Access message payload raw value
@@ -243,6 +248,11 @@ impl Bar {
         Ok(res)
     }
 
+    /// Get message id
+    pub fn id(&self) -> u32 {
+        Self::MESSAGE_ID
+    }
+
     /// Access message payload raw value
     pub fn raw(&self) -> &[u8; 8] {
         &self.raw
@@ -370,7 +380,7 @@ impl Bar {
 
     /// Set value of Three
     #[inline(always)]
-    pub fn set_three(&mut self, value: u8) -> Result<(), CanError> {
+    pub fn set_three(&mut self, value: BarThree) -> Result<(), CanError> {
         if value < 0_u8 || 7_u8 < value {
             return Err(CanError::ParameterOutOfRange { message_id: 512 });
         }
@@ -421,7 +431,7 @@ impl Bar {
 
     /// Set value of Four
     #[inline(always)]
-    pub fn set_four(&mut self, value: u8) -> Result<(), CanError> {
+    pub fn set_four(&mut self, value: BarFour) -> Result<(), CanError> {
         if value < 0_u8 || 3_u8 < value {
             return Err(CanError::ParameterOutOfRange { message_id: 512 });
         }
@@ -469,7 +479,7 @@ impl Bar {
 
     /// Set value of Type
     #[inline(always)]
-    pub fn set_xtype(&mut self, value: bool) -> Result<(), CanError> {
+    pub fn set_xtype(&mut self, value: BarType) -> Result<(), CanError> {
         let value = value as u8;
         self.raw.view_bits_mut::<Msb0>()[25..26].store_be(value);
         Ok(())
@@ -602,6 +612,11 @@ impl X4wd {
         Ok(res)
     }
 
+    /// Get message id
+    pub fn id(&self) -> u32 {
+        Self::MESSAGE_ID
+    }
+
     /// Access message payload raw value
     pub fn raw(&self) -> &[u8; 8] {
         &self.raw
@@ -644,7 +659,7 @@ impl X4wd {
 
     /// Set value of _4DRIVE
     #[inline(always)]
-    pub fn set_x4drive(&mut self, value: u8) -> Result<(), CanError> {
+    pub fn set_x4drive(&mut self, value: X4wd4drive) -> Result<(), CanError> {
         if value < 0_u8 || 7_u8 < value {
             return Err(CanError::ParameterOutOfRange { message_id: 768 });
         }
@@ -745,6 +760,11 @@ impl Amet {
         res.set_four(four)?;
         res.set_five(five)?;
         Ok(res)
+    }
+
+    /// Get message id
+    pub fn id(&self) -> u32 {
+        Self::MESSAGE_ID
     }
 
     /// Access message payload raw value
@@ -1023,6 +1043,11 @@ impl Dolor {
         Ok(res)
     }
 
+    /// Get message id
+    pub fn id(&self) -> u32 {
+        Self::MESSAGE_ID
+    }
+
     /// Access message payload raw value
     pub fn raw(&self) -> &[u8; 8] {
         &self.raw
@@ -1064,7 +1089,7 @@ impl Dolor {
 
     /// Set value of OneFloat
     #[inline(always)]
-    pub fn set_one_float(&mut self, value: f32) -> Result<(), CanError> {
+    pub fn set_one_float(&mut self, value: DolorOneFloat) -> Result<(), CanError> {
         if value < 0_f32 || 130_f32 < value {
             return Err(CanError::ParameterOutOfRange { message_id: 1028 });
         }
@@ -1160,6 +1185,11 @@ impl MultiplexTest {
         res.set_multiplexor(multiplexor)?;
         res.set_unmultiplexed_signal(unmultiplexed_signal)?;
         Ok(res)
+    }
+
+    /// Get message id
+    pub fn id(&self) -> u32 {
+        Self::MESSAGE_ID
     }
 
     /// Access message payload raw value
@@ -1546,6 +1576,11 @@ impl IntegerFactorOffset {
         res.set_byte_with_negative_offset(byte_with_negative_offset)?;
         res.set_byte_with_negative_min(byte_with_negative_min)?;
         Ok(res)
+    }
+
+    /// Get message id
+    pub fn id(&self) -> u32 {
+        Self::MESSAGE_ID
     }
 
     /// Access message payload raw value
